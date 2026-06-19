@@ -473,12 +473,12 @@ const STYLES = `
   .dlg-btn.primary:hover { filter: brightness(1.1); }
 `;
 
-for (const name of ['media-bar-card', 'media-group-card']) {
-  if (!customElements.get(name)) customElements.define(name, MediaGroupCard);
-}
+customElements.define('media-bar-card', MediaGroupCard);
 window.customCards ??= [];
-for (const [type, label] of [['media-bar-card', 'Media Bar Card'], ['media-group-card', 'Media Group Card']]) {
-  if (!window.customCards.some(c => c.type === type)) {
-    window.customCards.push({ type, name: label, description: 'Slim multi-speaker card with native grouping (group view, per-speaker volume, membership editor)' });
-  }
+if (!window.customCards.some(c => c.type === 'media-bar-card')) {
+  window.customCards.push({
+    type: 'media-bar-card',
+    name: 'Media Bar Card',
+    description: 'Slim multi-speaker card with native grouping (group view, per-speaker volume, membership editor)',
+  });
 }
