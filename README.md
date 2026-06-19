@@ -1,6 +1,6 @@
 # Media Bar Card
 
-A slim Lovelace card for Home Assistant media players. Auto-switches between a full media mode (artwork, track info, volume bar) and a compact mode (device name, volume bar).
+A slim Lovelace card for Home Assistant that manages a pool of grouping-capable media players. Shows a unified group row when speakers are joined, individual rows when they're not, and a dialog to edit group membership.
 
 ## Installation
 
@@ -10,22 +10,21 @@ Add as a custom repository in HACS → Frontend, then add the resource and use `
 
 ```yaml
 type: custom:media-bar-card
-entity: media_player.living_room
-name: Living Room        # optional, overrides friendly_name
-compact_when: switch.speaker_group  # optional — force compact mode when this entity is "on"
+entities:
+  - media_player.living_room
+  - media_player.kitchen
+  - media_player.office
+title: Speakers          # optional — shown in top bar
+group_label: Grouped     # optional — appended to master name when grouped (default: "Grouped")
+names:                   # optional — override friendly names
+  media_player.living_room: Vardagsrum
+  media_player.kitchen: Kök
 ```
 
-## Modes
+## Features
 
-**Media mode** — shown when `media_title` is set (or `compact_when` entity is off):
-```
-[ART]  Device Name
-[ART]  Title · Artist
-[████████████░░░░░]  65%
-```
-
-**Compact mode** — shown when no media info, or `compact_when` entity is on:
-```
-DEVICE NAME
-[████████████░░░░░]  65%
-```
+- **Group row** — shown when speakers are joined; displays master metadata, album art, and an absolute group volume slider
+- **Solo rows** — individual volume sliders for ungrouped speakers
+- **Per-speaker volume** — expand chevron on group row reveals individual sliders
+- **Membership editor** — link icon in the top bar opens a modal dialog; check/uncheck speakers and press Apply
+- Works with any `media_player` that supports the HA grouping feature (`media_player.join` / `media_player.unjoin`)
