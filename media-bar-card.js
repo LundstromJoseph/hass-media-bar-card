@@ -51,9 +51,27 @@ class MediaGroupCard extends HTMLElement {
     return (f & GROUPING) === GROUPING;
   }
 
+  _volMin() { return this._config.volume_min ?? 0; }
+  _volMax() { return this._config.volume_max ?? 100; }
+
+  _levelToBar(level) {
+    const min = this._volMin(), max = this._volMax();
+    return Math.round(Math.max(0, Math.min(1, (level * 100 - min) / (max - min))) * 100);
+  }
+
+  _barToLevel(barPct) {
+    const min = this._volMin(), max = this._volMax();
+    return (barPct / 100 * (max - min) + min) / 100;
+  }
+
+  _barToDisplayVol(barPct) {
+    const min = this._volMin(), max = this._volMax();
+    return Math.round(barPct / 100 * (max - min) + min);
+  }
+
   _volPct(id) {
     if (this._localVols[id] != null) return this._localVols[id];
-    return Math.round((this._st(id)?.attributes?.volume_level ?? 0) * 100);
+    return this._levelToBar(this._st(id)?.attributes?.volume_level ?? 0);
   }
 
   _members(id) {
@@ -298,7 +316,7 @@ class MediaGroupCard extends HTMLElement {
         const pct = moved ? (this._localVols[display] ?? 0) : Math.round((x / rect.width) * 100);
         this._localVols[display] = pct;
         this._paintBar(bar, pct);
-        this._setVolume(targets, pct / 100);
+        this._setVolume(targets, this._barToLevel(pct));
         this._startSuppress();
         this._isDragging = false;
       };
@@ -319,11 +337,11 @@ class MediaGroupCard extends HTMLElement {
     }, SUPPRESS_MS + 50);
   }
 
-  _paintBar(bar, pct) {
+  _paintBar(bar, barPct) {
     const fill = bar.querySelector('.vol-fill');
     const val = bar.querySelector('.vol-value');
-    if (fill) fill.style.width = pct + '%';
-    if (val) val.textContent = pct + '%';
+    if (fill) fill.style.width = barPct + '%';
+    if (val) val.textContent = this._barToDisplayVol(barPct) + '%';
   }
 
   _updateVolumes() {
