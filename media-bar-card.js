@@ -100,12 +100,6 @@ class MediaGroupCard extends HTMLElement {
     return members.find(id => this._st(id)?.state === 'playing') ?? members[0];
   }
 
-  _preferredMaster(desired) {
-    const g = this._group();
-    if (g && desired.includes(g.master)) return g.master;
-    return desired.find(id => this._st(id)?.state === 'playing') ?? desired[0];
-  }
-
   _signature() {
     return this._ids().map(id => {
       const s = this._st(id);
@@ -134,11 +128,10 @@ class MediaGroupCard extends HTMLElement {
       this._hass.callService('media_player', 'unjoin', { entity_id: id }));
   }
 
-  _reconcile(desired) {
+  _reconcile(master, desired) {
     const g = this._group();
     const current = g ? g.members : [];
     if (desired.length >= 2) {
-      const master = this._preferredMaster(desired);
       const alreadyOk = (g && g.master === master) ? new Set(g.members) : new Set([master]);
       const toJoin = desired.filter(id => id !== master && !alreadyOk.has(id));
       const toRemove = current.filter(id => !desired.includes(id));
@@ -185,7 +178,7 @@ class MediaGroupCard extends HTMLElement {
         <div class="head">
           ${artHtml(a.entity_picture)}
           <div class="info">
-            <span class="title">${esc(this._name(master))} · ${esc(this._config.group_label ?? 'Grouped')}</span>
+            <span class="title">${esc(this._name(master))} <span class="badge">master</span> · ${esc(this._config.group_label ?? 'Grouped')}</span>
             <span class="sub">${esc(sub)}</span>
           </div>
           <button class="icon-btn" data-act="expand" title="Per-speaker volume">
@@ -198,7 +191,7 @@ class MediaGroupCard extends HTMLElement {
             ${members.map(id => `
               <div class="member">
                 <div class="member-head">
-                  <span class="member-name">${esc(this._name(id))}${id === master ? ' · master' : ''}</span>
+                  <span class="member-name">${esc(this._name(id))}${id === master ? ' <span class="badge">master</span>' : ''}</span>
                   <button class="icon-btn sm" data-act="${id === master ? 'dissolve' : 'leave'}" data-id="${id}"
                           title="${id === master ? 'Ungroup all' : 'Remove from group'}">${ICON.unlink}</button>
                 </div>
@@ -227,23 +220,51 @@ class MediaGroupCard extends HTMLElement {
   }
 
   _dialogHtml() {
-    const rows = this._ids()
-      .filter(id => this._supportsGrouping(id))
-      .map(id => `
+    const groupingIds = this._ids().filter(id => this._supportsGrouping(id));
+    const masterRows = groupingIds.map(id => `
         <label class="dlg-row">
-          <input type="checkbox" class="dlg-cb" data-id="${id}" />
+          <input type="radio" name="dlg-master" class="dlg-master" data-id="${id}" />
           <span>${esc(this._name(id))}</span>
         </label>`).join('');
     return `
       <dialog>
         <div class="dlg-title">Play together</div>
-        ${rows}
+        <div class="dlg-section">
+          <div class="dlg-section-title">Master</div>
+          ${masterRows}
+        </div>
+        <div class="dlg-section">
+          <div class="dlg-section-title">Group with</div>
+          <div class="dlg-members"></div>
+        </div>
         <div class="dlg-actions">
           <button class="dlg-btn" data-dlg="cancel">Cancel</button>
           <button class="dlg-btn primary" data-dlg="apply">Apply</button>
         </div>
       </dialog>
     `;
+  }
+
+  _renderDialogMembers(masterId, checkedIds) {
+    const sr = this.shadowRoot;
+    const container = sr.querySelector('.dlg-members');
+    if (!container) return;
+    const others = this._ids()
+      .filter(id => this._supportsGrouping(id) && id !== masterId);
+    if (!others.length) {
+      container.innerHTML = '<div class="dlg-empty">No other speakers available</div>';
+      return;
+    }
+    container.innerHTML = others.map(id => `
+      <label class="dlg-row">
+        <input type="checkbox" class="dlg-cb" data-id="${id}"${checkedIds.includes(id) ? ' checked' : ''} />
+        <span>${esc(this._name(id))}</span>
+      </label>`).join('');
+  }
+
+  _dialogMaster() {
+    const radio = this.shadowRoot.querySelector('.dlg-master:checked');
+    return radio ? radio.dataset.id : null;
   }
 
   // ─── events ──────────────────────────────────────────────────────────────
@@ -275,19 +296,47 @@ class MediaGroupCard extends HTMLElement {
 
     sr.querySelector('[data-dlg="cancel"]').addEventListener('click', () => dialog.close());
 
+    // Re-render "group with" checkboxes when master radio changes
+    sr.querySelectorAll('.dlg-master').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const masterId = radio.dataset.id;
+        const prevChecked = [...sr.querySelectorAll('.dlg-cb:checked')].map(el => el.dataset.id);
+        this._renderDialogMembers(masterId, prevChecked);
+      });
+    });
+
     sr.querySelector('[data-dlg="apply"]').addEventListener('click', () => {
-      const desired = [...sr.querySelectorAll('.dlg-cb:checked')].map(el => el.dataset.id);
-      this._reconcile(desired);
+      const master = this._dialogMaster();
+      if (!master) return;
+      const checked = [...sr.querySelectorAll('.dlg-cb:checked')].map(el => el.dataset.id);
+      const desired = [master, ...checked];
+      this._reconcile(master, desired);
       dialog.close();
     });
   }
 
   _openDialog() {
-    const members = this._group()?.members ?? [];
-    this.shadowRoot.querySelectorAll('.dlg-cb').forEach(cb => {
-      cb.checked = members.includes(cb.dataset.id);
+    const sr = this.shadowRoot;
+    const g = this._group();
+    const members = g ? g.members : [];
+
+    // Determine default master: current group master, or playing speaker, or first
+    let defaultMaster = g ? g.master : null;
+    if (!defaultMaster) {
+      const groupingIds = this._ids().filter(id => this._supportsGrouping(id));
+      defaultMaster = groupingIds.find(id => this._st(id)?.state === 'playing') ?? groupingIds[0];
+    }
+
+    // Select the master radio
+    sr.querySelectorAll('.dlg-master').forEach(radio => {
+      radio.checked = radio.dataset.id === defaultMaster;
     });
-    this.shadowRoot.querySelector('dialog').showModal();
+
+    // Render "group with" checkboxes, pre-checking current members (except master)
+    const checkedIds = members.filter(id => id !== defaultMaster);
+    this._renderDialogMembers(defaultMaster, checkedIds);
+
+    sr.querySelector('dialog').showModal();
   }
 
   _wireVolBar(bar) {
@@ -445,6 +494,11 @@ const STYLES = `
   .member { padding: 0 8px 0 16px; }
   .member-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 2px 0; }
   .member-name { font-size: 12px; color: var(--secondary-text-color); }
+  .badge {
+    display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
+    background: var(--primary-color, #6750a4); color: #fff; vertical-align: 1px;
+  }
 
   /* dialog */
   dialog {
@@ -460,6 +514,10 @@ const STYLES = `
   dialog::backdrop { background: rgba(0,0,0,.5); }
   .dlg-title { font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
     color: var(--secondary-text-color); padding-bottom: 10px; }
+  .dlg-section { padding-bottom: 12px; }
+  .dlg-section-title { font-size: 10px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--secondary-text-color); padding-bottom: 4px; opacity: .7; }
+  .dlg-empty { font-size: 13px; color: var(--secondary-text-color); padding: 7px 0; opacity: .6; }
   .dlg-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px;
     color: var(--primary-text-color); cursor: pointer; user-select: none; }
   .dlg-row input { width: 18px; height: 18px; accent-color: var(--primary-color, #6750a4); cursor: pointer; }
