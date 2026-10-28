@@ -178,7 +178,7 @@ class MediaGroupCard extends HTMLElement {
         <div class="head">
           ${artHtml(a.entity_picture)}
           <div class="info">
-            <span class="title">${esc(this._name(master))} <span class="badge">master</span> · ${esc(this._config.group_label ?? 'Grouped')}</span>
+            <span class="title">${esc(this._name(master))} <span class="badge">master</span></span>
             <span class="sub">${esc(sub)}</span>
           </div>
           <button class="icon-btn" data-act="expand" title="Per-speaker volume">

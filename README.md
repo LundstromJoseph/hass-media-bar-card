@@ -15,7 +15,6 @@ entities:
   - media_player.kitchen
   - media_player.office
 title: Speakers          # optional — shown in top bar
-group_label: Grouped     # optional — appended to master name when grouped (default: "Grouped")
 names:                   # optional — override friendly names
   media_player.living_room: Vardagsrum
   media_player.kitchen: Kök
@@ -23,8 +22,8 @@ names:                   # optional — override friendly names
 
 ## Features
 
-- **Group row** — shown when speakers are joined; displays master metadata, album art, and an absolute group volume slider
+- **Group row** — shown when speakers are joined; displays master name with badge, metadata, album art, and an absolute group volume slider
 - **Solo rows** — individual volume sliders for ungrouped speakers
 - **Per-speaker volume** — expand chevron on group row reveals individual sliders
-- **Membership editor** — link icon in the top bar opens a modal dialog; check/uncheck speakers and press Apply
+- **Membership editor** — link icon in the top bar opens a dialog to pick the master (radio) and which speakers to group with (checkboxes)
 - Works with any `media_player` that supports the HA grouping feature (`media_player.join` / `media_player.unjoin`)
